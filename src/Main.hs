@@ -77,7 +77,6 @@ data CppModif
   | CppPtr
   | CppRef
   | CppConst
-  | CppVirtual
   deriving (Eq, Ord)
 
 data CppType a
@@ -122,11 +121,10 @@ parsePrim "qreal"  = Just CppDouble
 parsePrim _        = Nothing
 
 parseModif :: String -> Maybe CppModif
-parseModif "&"       = Just CppRef
-parseModif "*"       = Just CppPtr
-parseModif "const"   = Just CppConst
-parseModif "virtual" = Just CppVirtual
-parseModif _         = Nothing
+parseModif "&"     = Just CppRef
+parseModif "*"     = Just CppPtr
+parseModif "const" = Just CppConst
+parseModif _       = Nothing
 
 growType :: String -> CppType a -> CppType a
 growType s
@@ -155,11 +153,10 @@ toQtahPrim CppFloat  = "floatT"
 toQtahPrim CppDouble = "doubleT"
 
 toQtahModif :: CppModif -> Maybe String
-toQtahModif CppOpt     = Nothing
-toQtahModif CppPtr     = Just "ptrT"
-toQtahModif CppRef     = Just "refT"
-toQtahModif CppConst   = Just "constT"
-toQtahModif CppVirtual = error "toQtahModif: CppVirtual"
+toQtahModif CppOpt   = Nothing
+toQtahModif CppPtr   = Just "ptrT"
+toQtahModif CppRef   = Just "refT"
+toQtahModif CppConst = Just "constT"
 
 -- optional -> Tails.
 toQtahParam :: TypedName -> Coin String
@@ -179,19 +176,18 @@ goSurroundParams alterName (CppClass cl    rest) pars =
   goSurroundParams alterName rest (pars ++ " $ objT c_" ++ cl)
 goSurroundParams alterName (CppModif modif rest) pars =
   case modif of
-    CppOpt     -> goSurroundParams alterName rest  pars
-    CppPtr     -> goSurroundParams alterName rest (pars ++ " $ ptrT")
-    CppRef     -> goSurroundParams alterName rest (pars ++ " $ refT")
-    CppConst   -> error "goSurroundParams: CppConst"
-    CppVirtual -> error "goSurroundParams: CppVirtual"
+    CppOpt   -> goSurroundParams alterName rest  pars
+    CppPtr   -> goSurroundParams alterName rest (pars ++ " $ ptrT")
+    CppRef   -> goSurroundParams alterName rest (pars ++ " $ refT")
+    CppConst -> error "goSurroundParams: CppConst"
 
-surroundParams :: Bool -> TypedName -> String -> String
-surroundParams overloaded typed pars = res where
+surroundParams :: Bool -> String -> TypedName -> String -> String
+surroundParams overloaded suffix typed pars = res where
   (premethod, typed') = case typed of
     CppModif CppConst rest -> ("mkConstMethod", rest )
     _                      -> ("mkMethod"     , typed)
   method    = premethod ++ if overloaded then "' " else " "
-  alterName = if overloaded then (\s -> s ++ "\" \"" ++ s ++ "All") else id
+  alterName = if overloaded then (\s -> s ++ "\" \"" ++ s ++ suffix) else id
   res       = method ++ goSurroundParams alterName typed' pars
 
 toQtahParams :: [TypedName] -> [String]
@@ -203,10 +199,11 @@ toQtahParams params = minQtahParams ++ maxQtahParams where
   maxQtahParams = [makeQtahParams maxParams | length minParams /= length maxParams]
 
 toQtahDecl :: Bool -> FunDecl -> [String]
-toQtahDecl overloaded1 (FunDecl result params) =
-    map (\(overloaded2, pars) -> surroundParams (overloaded1 || overloaded2) result pars)
-  . zip [False, True]
-  $ toQtahParams params
+toQtahDecl overloaded1 (FunDecl result params) = surrAllParams qtahParams where
+  qtahParams = toQtahParams params
+  surrParams overloaded2 = surroundParams (overloaded1 || overloaded2) suffix result where
+    suffix = if overloaded2 then "All" else ""
+  surrAllParams = map (uncurry surrParams) . zip [False, True]
 
 toQtahDecls :: [FunDecl] -> [String]
 toQtahDecls [decl] = toQtahDecl False decl
@@ -249,6 +246,20 @@ SmartViewportUpdate
 BoundingRectViewportUpdate
 NoViewportUpdate
 -}
+
+{-
+QGraphicsEllipseItem *  addEllipse(qreal x, qreal y, qreal w, qreal h, const QPen & pen = QPen(), const QBrush & brush = QBrush())
+QGraphicsPolygonItem * addPolygon(const QPolygonF & polygon, const QPen & pen = QPen(), const QBrush & brush = QBrush())
+qreal height() const
+qreal height(int blah) const
+void invalidate(qreal x, qreal y, SceneLayers layers = AllLayers)
+void invalidate(qreal x, qreal y, qreal w, qreal h, SceneLayers layers = AllLayers)
+-}
+
+
+
+
+
 
 
 breakMaybe :: (a -> Maybe b) -> [a] -> ([b], [a])
@@ -304,15 +315,6 @@ main = do
 
   putStrLn $ transformDecl "void invalidate(qreal x, qreal y, qreal w, qreal h, SceneLayers layers = AllLayers)"-}
 
-
-{-
-QGraphicsEllipseItem *  addEllipse(qreal x, qreal y, qreal w, qreal h, const QPen & pen = QPen(), const QBrush & brush = QBrush())
-QGraphicsPolygonItem * addPolygon(const QPolygonF & polygon, const QPen & pen = QPen(), const QBrush & brush = QBrush())
-qreal height() const
-qreal height(int blah) const
-void invalidate(qreal x, qreal y, SceneLayers layers = AllLayers)
-void invalidate(qreal x, qreal y, qreal w, qreal h, SceneLayers layers = AllLayers)
--}
 
 
 -- QFont 	font() const
