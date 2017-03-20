@@ -48,7 +48,7 @@ into
 
 Groups of method and enum bindings can be interleaved freely.
 
-Limitations:
+## Behavior
 
 - any non-primitive type is treated as a class, so an enum translates into the `objT` and you have to change this manually after bindings are generated
 - overloaded methods translate into a group like this:
