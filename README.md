@@ -1,6 +1,6 @@
 # hoppy-cpp
 
-This is a quick and dirty tool that allows to generate approximate [Hoppy](https://gitlab.com/khumba/hoppy) bindings from C++ method headers and enums. Run it (e.g. via `stack build && stack exec hoppy-cpp"), then paste a bunch of bindings like
+This is a quick and dirty tool that allows to generate approximate [Hoppy](https://gitlab.com/khumba/hoppy) bindings from C++ method headers and enums. Run it (e.g. via `stack build && stack exec hoppy-cpp`), then paste a bunch of bindings like
 
 ```cpp
 QGraphicsEllipseItem *  addEllipse(qreal x, qreal y, qreal w, qreal h, const QPen & pen = QPen(), const QBrush & brush = QBrush())
