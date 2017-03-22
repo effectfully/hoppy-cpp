@@ -5,11 +5,17 @@ import Data.Function
 import Data.Char
 import Data.Maybe
 import Data.List
+import Data.IORef
 import Control.Monad
 
 (.*) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
 g .* f = \x y -> g (f x y)
 {-# INLINE (.*) #-}
+
+lastDef :: a -> [a] -> a
+lastDef x [] = x
+lastDef _ xs = last xs
+{-# INLINE lastDef #-}
 
 onCons :: (a -> [a] -> [b]) -> [a] -> [b]
 onCons _  []    = []
@@ -22,9 +28,11 @@ onHead f (x:xs) = f x : xs
 {-# INLINE onHead #-}
 
 continuousBy :: (a -> Bool) -> [a] -> [[a]]
-continuousBy p = go where
-  go xs = [pxs | not $ null pxs] ++ onCons (\x -> onHead (x:) . go) sxs where
-    (pxs, sxs) = break p xs
+continuousBy _ [] = []
+continuousBy p xs = go xs where
+  go [] = [[]]
+  go xs' = [pxs | not $ null pxs] ++ onCons (\x -> onHead (x:) . go) sxs where
+    (pxs, sxs) = break p xs'
 {-# INLINE continuousBy #-}
 
 splitBy :: (a -> Bool) -> [a] -> [[a]]
@@ -45,6 +53,10 @@ breakR :: (a -> Bool) -> [a] -> ([a], [a])
 breakR p xs = (reverse prefixR, x : reverse suffixR) where
   (suffixR, x : prefixR) = break p $ reverse xs
 {-# INLINE breakR #-}
+
+dropBefore :: Eq a => [a] -> [a] -> [a]
+dropBefore xs ys = lastDef ys . mapMaybe (stripPrefix xs) $ tails ys
+{-# INLINE dropBefore #-}
 
 data Coin a = Heads a | Tails a
             deriving (Functor)
@@ -135,8 +147,9 @@ growType s
   | otherwise                  = CppClass s
 
 parseTypedName :: String -> TypedName
-parseTypedName s = normType . gfoldr1 growType acc $ words noopt where
+parseTypedName s = normType $ gfoldr1 growType acc lexemes where
   (noopt, eqopt) = break (== '=') s
+  lexemes = words noopt >>= continuousBy isLetter
   acc = if null eqopt then CppPure else CppModif CppOpt . CppPure
 
 parseFunDecl :: String -> FunDecl
@@ -217,8 +230,8 @@ transformDecls = funDeclsFams >=> toQtahDecls where
 
 transformEnum :: String -> String
 transformEnum s = concat ["(", val, ", ", trans name, ")"] where
-  [name, val] = words s
-  trans = show . map (map toLower) . continuousBy isUpper
+  name : val : _ = words s
+  trans = show . map (map toLower) . continuousBy isUpper . dropBefore "::"
 
 transformDeclsOrEnums :: [String] -> [String]
 transformDeclsOrEnums ds | any (elem '(') ds = transformDecls ds
@@ -233,9 +246,20 @@ onNewlinedContents k = go k where
       else go (k' . (s:))
 
 main :: IO ()
-main = onNewlinedContents $ \ss -> do
-  mapM_ (putStrLn . ("  , " ++)) $ transformDeclsOrEnums ss
-  putStrLn ""
+main = do
+  mode <- newIORef True
+  onNewlinedContents $ \ss -> do
+    case ss of
+      ["method"] -> writeIORef mode True  *> putStrLn "OK"
+      ["enum"]   -> writeIORef mode False *> putStrLn "OK"
+      _          -> do
+        decl <- readIORef mode
+        mapM_ (putStrLn . ("  , " ++)) $ if decl
+          then transformDecls ss
+          else map transformEnum ss
+    putStrLn ""
+
+
 
 -- For testing:
 
@@ -248,190 +272,20 @@ NoViewportUpdate 3
 -}
 
 {-
+QGraphicsView::FullViewportUpdate	0	When any visible part of the scene changes or is reexposed, QGraphicsView will update the entire viewport. This approach is fastest when QGraphicsView spends more time figuring out what to draw than it would spend drawing (e.g., when very many small items are repeatedly updated). This is the preferred update mode for viewports that do not support partial updates, such as QGLWidget, and for viewports that need to disable scroll optimization.
+QGraphicsView::MinimalViewportUpdate	1	QGraphicsView will determine the minimal viewport region that requires a redraw, minimizing the time spent drawing by avoiding a redraw of areas that have not changed. This is QGraphicsView's default mode. Although this approach provides the best performance in general, if there are many small visible changes on the scene, QGraphicsView might end up spending more time finding the minimal approach than it will spend drawing.
+QGraphicsView::SmartViewportUpdate	2	QGraphicsView will attempt to find an optimal update mode by analyzing the areas that require a redraw.
+QGraphicsView::BoundingRectViewportUpdate	4	The bounding rectangle of all changes in the viewport will be redrawn. This mode has the advantage that QGraphicsView searches only one region for changes, minimizing time spent determining what needs redrawing. The disadvantage is that areas that have not changed also need to be redrawn.
+QGraphicsView::NoViewportUpdate	3	QGraphicsView will never update its viewport when the scene changes; the user is expected to control all updates. This mode disables all (potentially slow) item visibility testing in QGraphicsView, and is suitable for scenes that either require a fixed frame rate, or where the viewport is otherwise updated externally.
+-}
+
+{-
 QGraphicsEllipseItem *  addEllipse(qreal x, qreal y, qreal w, qreal h, const QPen & pen = QPen(), const QBrush & brush = QBrush())
 QGraphicsPolygonItem * addPolygon(const QPolygonF & polygon, const QPen & pen = QPen(), const QBrush & brush = QBrush())
 qreal height() const
 qreal height(int blah) const
 void invalidate(qreal x, qreal y, SceneLayers layers = AllLayers)
 void invalidate(qreal x, qreal y, qreal w, qreal h, SceneLayers layers = AllLayers)
--}
-
-{-
-bool 	acceptDrops() const
-bool 	acceptHoverEvents() const
-bool 	acceptTouchEvents() const
-Qt::MouseButtons 	acceptedMouseButtons() const
-virtual void 	advance(int phase)
-virtual QRectF 	boundingRect() const = 0
-QRegion 	boundingRegion(const QTransform & itemToDeviceTransform) const
-qreal 	boundingRegionGranularity() const
-CacheMode 	cacheMode() const
-QList<QGraphicsItem *> 	childItems() const
-QRectF 	childrenBoundingRect() const
-void 	clearFocus()
-QPainterPath 	clipPath() const
-virtual bool 	collidesWithItem(const QGraphicsItem * other, Qt::ItemSelectionMode mode = Qt::IntersectsItemShape) const
-virtual bool 	collidesWithPath(const QPainterPath & path, Qt::ItemSelectionMode mode = Qt::IntersectsItemShape) const
-QList<QGraphicsItem *> 	collidingItems(Qt::ItemSelectionMode mode = Qt::IntersectsItemShape) const
-QGraphicsItem * 	commonAncestorItem(const QGraphicsItem * other) const
-virtual bool 	contains(const QPointF & point) const
-QCursor 	cursor() const
-QVariant 	data(int key) const
-QTransform 	deviceTransform(const QTransform & viewportTransform) const
-qreal 	effectiveOpacity() const
-void 	ensureVisible(const QRectF & rect = QRectF(), int xmargin = 50, int ymargin = 50)
-void 	ensureVisible(qreal x, qreal y, qreal w, qreal h, int xmargin = 50, int ymargin = 50)
-bool 	filtersChildEvents() const
-GraphicsItemFlags 	flags() const
-QGraphicsItem * 	focusItem() const
-QGraphicsItem * 	focusProxy() const
-void 	grabKeyboard()
-void 	grabMouse()
-QGraphicsEffect * 	graphicsEffect() const
-QGraphicsItemGroup * 	group() const
-bool 	hasCursor() const
-bool 	hasFocus() const
-void 	hide()
-Qt::InputMethodHints 	inputMethodHints() const
-void 	installSceneEventFilter(QGraphicsItem * filterItem)
-bool 	isActive() const
-bool 	isAncestorOf(const QGraphicsItem * child) const
-bool 	isBlockedByModalPanel(QGraphicsItem ** blockingPanel = 0) const
-bool 	isClipped() const
-bool 	isEnabled() const
-bool 	isObscured() const
-bool 	isObscured(qreal x, qreal y, qreal w, qreal h) const
-bool 	isObscured(const QRectF & rect) const
-virtual bool 	isObscuredBy(const QGraphicsItem * item) const
-bool 	isPanel() const
-bool 	isSelected() const
-bool 	isUnderMouse() const
-bool 	isVisible() const
-bool 	isVisibleTo(const QGraphicsItem * parent) const
-bool 	isWidget() const
-bool 	isWindow() const
-QTransform 	itemTransform(const QGraphicsItem * other, bool * ok = 0) const
-QPointF 	mapFromItem(const QGraphicsItem * item, const QPointF & point) const
-QPolygonF 	mapFromItem(const QGraphicsItem * item, const QRectF & rect) const
-QPolygonF 	mapFromItem(const QGraphicsItem * item, const QPolygonF & polygon) const
-QPainterPath 	mapFromItem(const QGraphicsItem * item, const QPainterPath & path) const
-QPolygonF 	mapFromItem(const QGraphicsItem * item, qreal x, qreal y, qreal w, qreal h) const
-QPointF 	mapFromItem(const QGraphicsItem * item, qreal x, qreal y) const
-QPointF 	mapFromParent(const QPointF & point) const
-QPolygonF 	mapFromParent(const QRectF & rect) const
-QPolygonF 	mapFromParent(const QPolygonF & polygon) const
-QPainterPath 	mapFromParent(const QPainterPath & path) const
-QPolygonF 	mapFromParent(qreal x, qreal y, qreal w, qreal h) const
-QPointF 	mapFromParent(qreal x, qreal y) const
-QPointF 	mapFromScene(const QPointF & point) const
-QPolygonF 	mapFromScene(const QRectF & rect) const
-QPolygonF 	mapFromScene(const QPolygonF & polygon) const
-QPainterPath 	mapFromScene(const QPainterPath & path) const
-QPolygonF 	mapFromScene(qreal x, qreal y, qreal w, qreal h) const
-QPointF 	mapFromScene(qreal x, qreal y) const
-QRectF 	mapRectFromItem(const QGraphicsItem * item, const QRectF & rect) const
-QRectF 	mapRectFromItem(const QGraphicsItem * item, qreal x, qreal y, qreal w, qreal h) const
-QRectF 	mapRectFromParent(const QRectF & rect) const
-QRectF 	mapRectFromParent(qreal x, qreal y, qreal w, qreal h) const
-QRectF 	mapRectFromScene(const QRectF & rect) const
-QRectF 	mapRectFromScene(qreal x, qreal y, qreal w, qreal h) const
-QRectF 	mapRectToItem(const QGraphicsItem * item, const QRectF & rect) const
-QRectF 	mapRectToItem(const QGraphicsItem * item, qreal x, qreal y, qreal w, qreal h) const
-QRectF 	mapRectToParent(const QRectF & rect) const
-QRectF 	mapRectToParent(qreal x, qreal y, qreal w, qreal h) const
-QRectF 	mapRectToScene(const QRectF & rect) const
-QRectF 	mapRectToScene(qreal x, qreal y, qreal w, qreal h) const
-QPointF 	mapToItem(const QGraphicsItem * item, const QPointF & point) const
-QPolygonF 	mapToItem(const QGraphicsItem * item, const QRectF & rect) const
-QPolygonF 	mapToItem(const QGraphicsItem * item, const QPolygonF & polygon) const
-QPainterPath 	mapToItem(const QGraphicsItem * item, const QPainterPath & path) const
-QPolygonF 	mapToItem(const QGraphicsItem * item, qreal x, qreal y, qreal w, qreal h) const
-QPointF 	mapToItem(const QGraphicsItem * item, qreal x, qreal y) const
-QPointF 	mapToParent(const QPointF & point) const
-QPolygonF 	mapToParent(const QRectF & rect) const
-QPolygonF 	mapToParent(const QPolygonF & polygon) const
-QPainterPath 	mapToParent(const QPainterPath & path) const
-QPolygonF 	mapToParent(qreal x, qreal y, qreal w, qreal h) const
-QPointF 	mapToParent(qreal x, qreal y) const
-QPointF 	mapToScene(const QPointF & point) const
-QPolygonF 	mapToScene(const QRectF & rect) const
-QPolygonF 	mapToScene(const QPolygonF & polygon) const
-QPainterPath 	mapToScene(const QPainterPath & path) const
-QPolygonF 	mapToScene(qreal x, qreal y, qreal w, qreal h) const
-QPointF 	mapToScene(qreal x, qreal y) const
-void 	moveBy(qreal dx, qreal dy)
-qreal 	opacity() const
-virtual QPainterPath 	opaqueArea() const
-virtual void 	paint(QPainter * painter, const QStyleOptionGraphicsItem * option, QWidget * widget = 0) = 0
-QGraphicsItem * 	panel() const
-PanelModality 	panelModality() const
-QGraphicsItem * 	parentItem() const
-QGraphicsObject * 	parentObject() const
-QGraphicsWidget * 	parentWidget() const
-QPointF 	pos() const
-void 	removeSceneEventFilter(QGraphicsItem * filterItem)
-void 	resetTransform()
-qreal 	rotation() const
-qreal 	scale() const
-QGraphicsScene * 	scene() const
-QRectF 	sceneBoundingRect() const
-QPointF 	scenePos() const
-QTransform 	sceneTransform() const
-void 	scroll(qreal dx, qreal dy, const QRectF & rect = QRectF())
-void 	setAcceptDrops(bool on)
-void 	setAcceptHoverEvents(bool enabled)
-void 	setAcceptTouchEvents(bool enabled)
-void 	setAcceptedMouseButtons(Qt::MouseButtons buttons)
-void 	setActive(bool active)
-void 	setBoundingRegionGranularity(qreal granularity)
-void 	setCacheMode(CacheMode mode, const QSize & logicalCacheSize = QSize())
-void 	setCursor(const QCursor & cursor)
-void 	setData(int key, const QVariant & value)
-void 	setEnabled(bool enabled)
-void 	setFiltersChildEvents(bool enabled)
-void 	setFlag(GraphicsItemFlag flag, bool enabled = true)
-void 	setFlags(GraphicsItemFlags flags)
-void 	setFocus(Qt::FocusReason focusReason = Qt::OtherFocusReason)
-void 	setFocusProxy(QGraphicsItem * item)
-void 	setGraphicsEffect(QGraphicsEffect * effect)
-void 	setGroup(QGraphicsItemGroup * group)
-void 	setInputMethodHints(Qt::InputMethodHints hints)
-void 	setOpacity(qreal opacity)
-void 	setPanelModality(PanelModality panelModality)
-void 	setParentItem(QGraphicsItem * newParent)
-void 	setPos(const QPointF & pos)
-void 	setPos(qreal x, qreal y)
-void 	setRotation(qreal angle)
-void 	setScale(qreal factor)
-void 	setSelected(bool selected)
-void 	setToolTip(const QString & toolTip)
-void 	setTransform(const QTransform & matrix, bool combine = false)
-void 	setTransformOriginPoint(const QPointF & origin)
-void 	setTransformOriginPoint(qreal x, qreal y)
-void 	setTransformations(const QList<QGraphicsTransform *> & transformations)
-void 	setVisible(bool visible)
-void 	setX(qreal x)
-void 	setY(qreal y)
-void 	setZValue(qreal z)
-virtual QPainterPath 	shape() const
-void 	show()
-void 	stackBefore(const QGraphicsItem * sibling)
-QGraphicsObject * 	toGraphicsObject()
-const QGraphicsObject * 	toGraphicsObject() const
-QString 	toolTip() const
-QGraphicsItem * 	topLevelItem() const
-QGraphicsWidget * 	topLevelWidget() const
-QTransform 	transform() const
-QPointF 	transformOriginPoint() const
-QList<QGraphicsTransform *> 	transformations() const
-virtual int 	type() const
-void 	ungrabKeyboard()
-void 	ungrabMouse()
-void 	unsetCursor()
-void 	update(const QRectF & rect = QRectF())
-void 	update(qreal x, qreal y, qreal width, qreal height)
-QGraphicsWidget * 	window() const
-qreal 	x() const
-qreal 	y() const
-qreal 	zValue() const
+void 	addItem(QGraphicsItem *item)
+QGraphicsItem *	itemAt(const QPointF &position, const QTransform &deviceTransform) const
 -}
