@@ -149,7 +149,8 @@ growType s
 parseTypedName :: String -> TypedName
 parseTypedName s = normType $ gfoldr1 growType acc lexemes where
   (noopt, eqopt) = break (== '=') s
-  lexemes = words noopt >>= continuousBy isLetter
+  isName c = isLetter c || any (c ==) "<>:"
+  lexemes = words noopt >>= continuousBy isName
   acc = if null eqopt then CppPure else CppModif CppOpt . CppPure
 
 parseFunDecl :: String -> FunDecl
@@ -288,4 +289,6 @@ void invalidate(qreal x, qreal y, SceneLayers layers = AllLayers)
 void invalidate(qreal x, qreal y, qreal w, qreal h, SceneLayers layers = AllLayers)
 void 	addItem(QGraphicsItem *item)
 QGraphicsItem *	itemAt(const QPointF &position, const QTransform &deviceTransform) const
+void 	focusItemChanged(QGraphicsItem *newFocusItem, QGraphicsItem *oldFocusItem, Qt::FocusReason reason)
+void 	changed(const QList<QRectF> &region)
 -}
