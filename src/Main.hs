@@ -27,6 +27,14 @@ onHead _  []    = []
 onHead f (x:xs) = f x : xs
 {-# INLINE onHead #-}
 
+continuousBy :: (a -> Bool) -> [a] -> [[a]]
+continuousBy _ [] = []
+continuousBy p xs = go xs where
+  go []  = [[]]
+  go xs' = [pxs | not $ null pxs] ++ onCons (\x -> onHead (x:) . go) sxs where
+    (pxs, sxs) = break p xs'
+{-# INLINE continuousBy #-}
+
 continuousFrom :: (a -> Bool) -> [a] -> [[a]]
 continuousFrom p xs = go [] xs where
   go ps xs' = [pxs' | not $ null pxs'] ++ onCons (\x -> go [x]) sxs where
@@ -149,7 +157,7 @@ parseTypedName :: String -> TypedName
 parseTypedName s = normType $ gfoldr1 growType acc lexemes where
   (noopt, eqopt) = break (== '=') s
   isName c = isLetter c || any (c ==) "<>:"
-  lexemes = words noopt >>= continuousFrom isName
+  lexemes = words noopt >>= continuousBy isName
   acc = if null eqopt then CppPure else CppModif CppOpt . CppPure
 
 parseFunDecl :: String -> FunDecl
