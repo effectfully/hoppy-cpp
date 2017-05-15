@@ -27,13 +27,12 @@ onHead _  []    = []
 onHead f (x:xs) = f x : xs
 {-# INLINE onHead #-}
 
-continuousBy :: (a -> Bool) -> [a] -> [[a]]
-continuousBy _ [] = []
-continuousBy p xs = go xs where
-  go [] = [[]]
-  go xs' = [pxs | not $ null pxs] ++ onCons (\x -> onHead (x:) . go) sxs where
+continuousFrom :: (a -> Bool) -> [a] -> [[a]]
+continuousFrom p xs = go [] xs where
+  go ps xs' = [pxs' | not $ null pxs'] ++ onCons (\x -> go [x]) sxs where
     (pxs, sxs) = break p xs'
-{-# INLINE continuousBy #-}
+    pxs' = ps ++ pxs
+{-# INLINE continuousFrom #-}
 
 splitBy :: (a -> Bool) -> [a] -> [[a]]
 splitBy _ [] = []
@@ -150,7 +149,7 @@ parseTypedName :: String -> TypedName
 parseTypedName s = normType $ gfoldr1 growType acc lexemes where
   (noopt, eqopt) = break (== '=') s
   isName c = isLetter c || any (c ==) "<>:"
-  lexemes = words noopt >>= continuousBy isName
+  lexemes = words noopt >>= continuousFrom isName
   acc = if null eqopt then CppPure else CppModif CppOpt . CppPure
 
 parseFunDecl :: String -> FunDecl
@@ -232,7 +231,12 @@ transformDecls = funDeclsFams >=> toQtahDecls where
 transformEnum :: String -> String
 transformEnum s = concat ["(", val, ", ", trans name, ")"] where
   name : val : _ = words s
-  trans = show . map (map toLower) . continuousBy isUpper . dropBefore "::"
+  trans = ("[" ++)
+        . (++ "]")
+        . intercalate ", "
+        . map (show . map toLower)
+        . continuousFrom isUpper
+        . dropBefore "::"
 
 transformDeclsOrEnums :: [String] -> [String]
 transformDeclsOrEnums ds | any (elem '(') ds = transformDecls ds
